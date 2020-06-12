@@ -48,8 +48,8 @@ def main(args):
     parsed_args = parser.parse_args(args[1:])
 
     output_filepath_template = construct_path_from(parsed_args.output_filename
-                                                       , 'output'
-                                                       , rel_path_to_this_script_dir)
+                                                   , 'output'
+                                                   , rel_path_to_this_script_dir)
     predictions_list = parsed_args.predictions_list
     if predictions_list is None:
         predictions_list = '*'
