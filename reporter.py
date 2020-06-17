@@ -332,7 +332,20 @@ class Reporter:
 
     @staticmethod
     def df2tex(dataf):
-        text = dataf.to_csv(sep='&', line_terminator=' \\\\\n')
+        text = dataf.round({
+            'MAE_Germany': 1,
+            'MAE_Russia': 1,
+            'MAE_US': 1,
+            'MALE_Germany': 3,
+            'MALE_Russia': 3,
+            'MALE_US': 3,
+            'MALE_Germany': 3,
+            'MALE_Russia': 3,
+            'MALE_US': 3,
+            'MASE_Germany': 3,
+            'MASE_Russia': 3,
+            'MASE_US': 3,
+        }).to_csv(sep='&', line_terminator=' \\\\\n &')
         return text.replace('&', ' & ')
 
     @staticmethod
