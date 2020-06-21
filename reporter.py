@@ -18,6 +18,21 @@ DATAFILE_TEMPLATE = '%m-%d-%Y.csv'
 DATASOURCE = 'https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/'\
              'csse_covid_19_data/csse_covid_19_daily_reports/'
 
+PLOT_MARKERS = ['o', 'v', '^', '<', '>'
+                , 's', 'p', 'P', '+', 'X', 'D']
+COLORS = [
+    "orange",
+    "purple",
+    "pink",
+    "teal",
+    "tan",
+    "red",
+    "brown",
+    "fuchsia",
+    "gray",
+    "green",
+]
+
 class Reporter:
     def __init__(self, output_path_template, whole_country=False, datastorage_path='data'):
         self.opt = output_path_template
@@ -67,10 +82,12 @@ class Reporter:
                                                , date_parser=parse_date_obj)
                     except ValueError:
                         raise ValueError('In ' + filepath + ' .'
-                                         ' Possible reasons (can be recognized by the exception stack):'
+                                         ' Possible reasons (can be recognized'
+                                         ' by the exception stack):'
                                          ' 1) Date column is not recognized.'
                                          ' Please, use for the date column name'
-                                         ' either "Date", "TrialDate", "Last_Update" or "Last Update"!'
+                                         ' either "Date", "TrialDate",'
+                                         ' "Last_Update" or "Last Update"!'
                                          ' 2) Invalid data format.')
         fileinfo = fileinfo.rename({
             # Old data format
@@ -182,8 +199,10 @@ class Reporter:
     def get_data_for_period(self, start_date, end_date, countries=None, regions=None):
         if isinstance(start_date, list):
             if isinstance(end_date, list):
-                return pd.concat([self.get_data_for_period(sd, ed, countries=c, regions=r)
-                                  for sd, ed, c, r in zip(start_date, end_date, countries, regions)])
+                return pd.concat([
+                    self.get_data_for_period(sd, ed, countries=c, regions=r)
+                    for sd, ed, c, r in zip(start_date, end_date, countries, regions)
+                ])
             return pd.concat([self.get_data_for_period(sd, end_date, countries=c, regions=r)
                               for sd, c, r in zip(start_date, countries, regions)])
         if isinstance(start_date, list):
@@ -230,7 +249,7 @@ class Reporter:
             prediction.columns = [col + '_' + predictor_name for col in prediction.columns]
         predictions_val = list(predictions.values())
         merged_pr = predictions_val[0].join(predictions_val[1:], how='outer')
-        return cls.trial_date_to_prediction_date(merged_pr)
+        return cls.trial_date_to_prediction_date(merged_pr), merged_pr
 
     def merge_data_and_predictions(self, data, merged_predictions):
         return data.join(merged_predictions, how='right')
@@ -246,17 +265,23 @@ class Reporter:
         return grouped
 
     def prepare_data_and_prediction_for_report(self, predictions_list):
-        predictions = {prediction_file[max(prediction_file.rfind('/'), prediction_file.rfind('\\')) + 1
-                                       : prediction_file.rfind('.')]
-                       : self.parse_file(prediction_file)
-                       for prediction_file in predictions_list}
-        merged_predictions = self.prepare_predictions_for_merge(predictions)
+        predictions = {
+            prediction_file[max(prediction_file.rfind('/'), prediction_file.rfind('\\')) + 1
+                            : prediction_file.rfind('.')]
+            : self.parse_file(prediction_file)
+            for prediction_file in predictions_list
+        }
+        merged_predictions, merged_original_p = self.prepare_predictions_for_merge(predictions)
         predictions_index = merged_predictions.index.to_native_types()
-        start_dates, end_dates, countries, regions = self.get_locations_by_periods(predictions_index)
+        start_dates, end_dates, countries, regions = self.get_locations_by_periods(
+            predictions_index
+        )
         # print('\n'.join(map(str, zip(start_dates, end_dates, countries, regions))))
-        data = self.get_data_for_period(start_dates, end_dates, countries=countries, regions=regions)
+        data = self.get_data_for_period(start_dates, end_dates
+                                        , countries=countries, regions=regions)
         merged = self.merge_data_and_predictions(data, merged_predictions).sort_index()
-        return merged
+        merged_original = self.merge_data_and_predictions(data, merged_original_p).sort_index()
+        return merged, merged_original
 
     @staticmethod
     def count_metrics(metrics_list, data_for_report, horizons=None):
@@ -298,17 +323,6 @@ class Reporter:
                 return label
             return '_'.join(label)
 
-        #def make_labels(selector, values):
-        #    if len(selector) == 1:
-        #        return list(set(values[selector[0]]))
-        #    return ['_'.join(el) for el in set(zip(*[values[s] for s in selector]))]
-
-        # splitting_labels = make_labels(splitting_features, metric_vals)
-        # row_labels = make_labels(row_features, metric_vals)
-        # column_labels = make_labels(column_features, metric_vals)
-        #         # tables = {feature : pd.DataFrame(index=row_labels, columns=column_labels)
-        #           for feature in splitting_labels}
-
         table3d = {}
         for i in range(len(metric_vals['value'])):
             splitting_label = make_label(splitting_features, metric_vals, i)
@@ -340,20 +354,17 @@ class Reporter:
             'MALE_Germany': 3,
             'MALE_Russia': 3,
             'MALE_US': 3,
-            'MALE_Germany': 3,
-            'MALE_Russia': 3,
-            'MALE_US': 3,
             'MASE_Germany': 3,
             'MASE_Russia': 3,
             'MASE_US': 3,
         }).to_csv(sep='&', line_terminator=linet)[:-len(linet)]
         return text.replace('&', ' & ')
 
-    @staticmethod
-    def generate_forecasting_plot(data_for_report, save_path_template
+    def generate_forecasting_plot(self, dap, save_path_template
                                   , date_selector=None
                                   , axis_x=None, axis_y_splitter=None
-                                  , line_labels_basis=None):
+                                  , line_labels_basis=None
+                                  , line_filter=None):
         if date_selector is None or len(date_selector) == 0:
             return []
         if axis_x is None:
@@ -362,36 +373,218 @@ class Reporter:
             axis_y_splitter = 'PredType'
         if line_labels_basis is None:
             line_labels_basis = ['Model']
+        if line_filter is None:
+            line_filter = {}
+        else:
+            raise NotImplementedError('Lines filtering is not implemented')
 
         generated_files = []
 
-        warnings.warn("Generating forecasting plots are not implemented now"
-                      , category=FutureWarning)
+        for sdate_str in date_selector:
+            sdate = pd.Timestamp(sdate_str)
+            for location, info in dap.items():
+                sdate_info = info.loc[pd.IndexSlice[:, :, sdate], :]
+                new_columns = sdate_info.columns.values
+                swap_1_2 = lambda x: (x[0], x[2], int(x[1]))
+                new_columns = [swap_1_2(col.split('_')) if '_' in col else (col, 'Actual', 0)
+                               for col in new_columns]
+                new_columns = pd.MultiIndex.from_tuples(new_columns
+                                                        , names=['PredType', 'Model', 'Horizon'])
+
+                new_columns = new_columns.set_levels(
+                    new_columns.levels[2].map(lambda x: pd.Timedelta(x, unit='D'))
+                    , level=2
+                )
+                sdate_info.columns = new_columns
+                sdate_info.sort_index(level='Horizon', axis=1)
+
+                fig, axes = plt.subplots(
+                    sdate_info.columns.get_level_values(axis_y_splitter).nunique()
+                    , 1
+                    , figsize=(16, 30)
+                )
+                for (axis_y_name, one_axis_y_info), axe in zip(sdate_info.groupby(
+                        level=axis_y_splitter, axis=1
+                ), axes):
+
+                    for line_n, (line_label, plot_info) in enumerate(one_axis_y_info.groupby(
+                            level=line_labels_basis
+                            , axis=1
+                    )):
+                        if (line_label == 'Actual') or (axis_y_name == 'Actual'):
+                            data_xmin = sdate - pd.Timedelta(5, unit='D')
+                            data_xmax = sdate + pd.Timedelta(
+                                one_axis_y_info.columns.get_level_values(axis_x).max()
+                                , unit='D'
+                            )
+                            country = one_axis_y_info.index.get_level_values('Country')[0]
+                            region = one_axis_y_info.index.get_level_values('Region')[0]
+                            data_for_period = self.get_data_for_period(str(data_xmin.date())
+                                                                       , str(data_xmax.date())
+                                                                       , countries={country}
+                                                                       , regions={region})
+                            axe_x = data_for_period.index.get_level_values('Date')
+                            axe_y = data_for_period[axis_y_name]
+                            color = 'black'
+                        else:
+                            mask = plot_info.notna()
+                            if mask.sum().sum() == 0:
+                                #line_label += ' (No data)'
+                                continue
+                            non_nan_plot_info = plot_info[mask]
+                            axe_x = non_nan_plot_info.columns.get_level_values(axis_x) + sdate
+                            axe_y = non_nan_plot_info.values.reshape(-1)
+                            color = COLORS[(line_n - 1) % len(COLORS)]
+                        axe.plot(axe_x, axe_y, '-' + PLOT_MARKERS[2 * (line_n - 1) % len(PLOT_MARKERS)]
+                                 , label=line_label, c=color)
+
+                    axe.axvline(x=sdate.to_pydatetime(), ymin=0.0, ymax=1.0
+                                , linestyle='--', lw=1, color='r')
+                    for tick in axe.get_xticklabels():
+                        tick.set_rotation(45)
+                    axe.tick_params(axis='both', which='major', labelsize=20)
+                    axe.legend(loc='upper left', fontsize=25)
+
+                    axe.set_title("Series of covid-19 for {} {}".format(location, axis_y_name)
+                                  , fontsize=25)
+                    axe.set_ylabel('Cummulative cases {}'.format(axis_y_name)
+                                   , fontsize=20)
+
+                plt.tight_layout()
+                image_name = '_'.join([save_path_template, location, sdate_str]) + '.png'
+                fig.savefig(image_name)
+                generated_files.append(image_name)
+
         return generated_files
 
     @staticmethod
-    def generate_compairing_plot(metric_vals, save_path_template
-                                 , axis_x=None, axis_y=None
-                                 , line_labels_basis=None):
+    def generate_compairing_plot(dap, save_path_template
+                                 , file_splitter=None
+                                 , axis_x=None, axis_y_splitter=None
+                                 , line_labels_basis=None
+                                 , line_filter=None
+                                 , horizons_list=None
+                                 , compare_diff_with_actual=False):
+        if file_splitter is None:
+            file_splitter = 'PredType'
         if axis_x is None:
             axis_x = 'Date'
-        if axis_y is None:
-            axis_y = ['Confirmed', 'Deaths', 'Recovered']
+        if axis_y_splitter is None:
+            axis_y_splitter = 'Horizon'
         if line_labels_basis is None:
-            line_labels_basis = ['Model', 'Horizon']
+            line_labels_basis = ['Model']
+        if line_filter is None:
+            line_filter = {}
+        else:
+            raise NotImplementedError('Lines filtering is not implemented')
+        if not(horizons_list is None):
+            horizons_list = [int(horizon) for horizon in horizons_list]
 
         generated_files = []
 
-        warnings.warn("Generating compairing plots are not implemented now"
-                      , category=FutureWarning)
+        for location, info in dap.items():
+            if not(isinstance(info.columns, pd.MultiIndex)):
+                new_columns = info.columns.values
+                int_1 = lambda x: (x[0], int(x[1]), x[2])
+                new_columns = [int_1(col.split('_')) if '_' in col else (col, 0, 'Actual')
+                            for col in new_columns]
+                new_columns = pd.MultiIndex.from_tuples(new_columns
+                                                        , names=['PredType', 'Horizon', 'Model'])
+
+                info.columns = new_columns
+
+            data = info.loc[:, pd.IndexSlice[:, :, 'Actual']]
+
+            if not(horizons_list is None):
+                info = info.loc[:, pd.IndexSlice[:, horizons_list, :]]
+            
+            for file_name, file_info in info.groupby(level=file_splitter, axis=1):
+                fig, axes = plt.subplots(
+                    file_info.columns.get_level_values(axis_y_splitter).nunique()
+                    , 1
+                    , figsize=(16, 30)
+                )
+                for (axis_y_name, one_axis_y_info), axe in zip(file_info.groupby(
+                        level=axis_y_splitter, axis=1
+                ), axes):
+
+                    if axis_y_splitter == 'Horizon':
+                        axis_y_displayname = 'horizon ' + str(axis_y_name)
+
+                    dates_mask = file_info.iloc[:, 0] == -5e+5
+
+                    for line_n, (line_label, plot_info) in enumerate(one_axis_y_info.groupby(
+                            level=line_labels_basis
+                            , axis=1
+                    )):
+                        if isinstance(line_label, tuple):
+                            line_label = '_'.join(map(str, line_label))
+                        
+                        color = COLORS[(line_n - 1) % len(COLORS)]
+                        plot_info = plot_info[plot_info.columns[0]]
+                        mask = plot_info.notna()
+                        dates_mask |= mask
+                        if mask.sum().sum() == 0:
+                            #line_label += ' (No data)'
+                            continue
+                        non_nan_plot_info = plot_info[mask]
+                        axe_x = non_nan_plot_info.index.get_level_values(axis_x)
+                        axe_y = non_nan_plot_info.values.reshape(-1)
+                        if compare_diff_with_actual:
+                            axe_y = axe_y - data.loc[non_nan_plot_info.index
+                                                    , pd.IndexSlice[file_name, 0, 'Actual']]
+
+                        axe.plot(axe_x, axe_y, '-' + PLOT_MARKERS[2 * ((line_n - 1) // 3) % len(PLOT_MARKERS)]
+                                , label=line_label, c=color)
+
+                    if compare_diff_with_actual:
+                        axe.grid()
+                    else:
+                        sel_data = data.loc[:, pd.IndexSlice[file_name, 0, 'Actual']][dates_mask]
+                        data_x = sel_data.index.get_level_values(axis_x)
+                        data_y = sel_data.values.reshape(-1)
+                        axe.plot(data_x, data_y, '-o', label='Actual', c='black')
+
+                    for tick in axe.get_xticklabels():
+                        tick.set_rotation(45)
+                    axe.tick_params(axis='both', which='major', labelsize=20)
+                    axe.legend(loc='upper left', fontsize=15)
+
+                    axe.set_title(
+                        "Series of covid-19 for {} {} and {}".format(location, file_name
+                                                                             , axis_y_displayname)
+                        , fontsize=25
+                    )
+                    pretext = 'Diff with actual' if compare_diff_with_actual else 'Cumulative'
+                    axe.set_ylabel(pretext + ' cases for {}'.format(axis_y_displayname)
+                                   , fontsize=20)
+
+                plt.tight_layout()
+                path_components = [save_path_template, location, file_name]
+                if compare_diff_with_actual:
+                    path_components.append('diff')
+                image_name = '_'.join(path_components) + '.png'
+                fig.savefig(image_name)
+                plt.close()
+                generated_files.append(image_name)
+
         return generated_files
 
-    def report(self, predictions_list, metrics_list, horizons_list=None, date_selector=None):
+    def report(self, predictions_list, metrics_list
+               , horizons_list=None, date_selector=None, compare_diff_with_actual=None):
         print('Preparing data for report')
-        merged_data_and_predictions = self.prepare_data_and_prediction_for_report(predictions_list)
-        data_for_report = self.group_merged_data_and_predictions_by_location(merged_data_and_predictions)
+        merged_data_and_predictions, merged_orig_dap = self.prepare_data_and_prediction_for_report(
+            predictions_list
+        )
+        dap_for_report = self.group_merged_data_and_predictions_by_location(
+            merged_data_and_predictions
+        )
+        original_dap_for_report = self.group_merged_data_and_predictions_by_location(
+            merged_orig_dap
+        )
+
         print('Counting metrics')
-        metric_vals = self.count_metrics(metrics_list, data_for_report, horizons_list)
+        metric_vals = self.count_metrics(metrics_list, dap_for_report, horizons_list)
         print('Forming tables')
         df3d = self.form_tables(metric_vals
                                 , splitting_features=['pred_type']
@@ -415,8 +608,22 @@ class Reporter:
                 texfile.write(self.df2tex(df2d))
             generated_files.append(self.opt + '_metrics_' + title + '.tex')
 
-            generated_files += self.generate_forecasting_plot(data_for_report, self.opt + '_metrics_' + title
-                                                              , date_selector=date_selector)
-            generated_files += self.generate_compairing_plot(metric_vals, self.opt + '_metrics_' + title)
+        generated_files += self.generate_forecasting_plot(original_dap_for_report
+                                                          , self.opt + '_forecast'
+                                                          , date_selector=date_selector)
+        
+        generated_files += self.generate_compairing_plot(
+            dap_for_report
+            , self.opt + '_comparison'
+            , compare_diff_with_actual=False
+            , horizons_list=horizons_list
+        )
+
+        generated_files += self.generate_compairing_plot(
+            dap_for_report
+            , self.opt + '_comparison'
+            , compare_diff_with_actual=True
+            , horizons_list=horizons_list
+        )
 
         return generated_files

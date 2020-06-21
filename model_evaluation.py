@@ -31,6 +31,11 @@ def setup_parser(parser):
              ', by default the whole "predictions" dir will be considered'
     )
     parser.add_argument(
+        '-f', '--predictions-filter', nargs='+',
+        help='helps to select one model from family' \
+             ', type in format family_starting_tag:selected_model'
+    )
+    parser.add_argument(
         '-c', '--whole-country', action='store_true',
         help='set this flag in order to sum data over regions ' \
              'and set country as minimal location entity'
@@ -43,12 +48,19 @@ def setup_parser(parser):
         '-d', '--date-selector', nargs='+',
         help='anchor date(s) for forecasting plots'
     )
+    parser.add_argument(
+        '-D', '--compare-diff-with-actual', action='store_true',
+        help='set this flag in order to ' \
+             'plot differences of predictions with actual values'
+    )
 
-def construct_path_from(argpath, filetype, rel_path_to_this_script_dir):
+def construct_path_from(argpath, filetype, rel_path_to_this_script_dir
+                        , predictions_filter=None):
     if isinstance(argpath, list):
         files = []
         for path in argpath:
-            files += construct_path_from(path, filetype, rel_path_to_this_script_dir)
+            files += construct_path_from(path, filetype, rel_path_to_this_script_dir
+                                         , predictions_filter=predictions_filter)
         return files
 
     if '/' in argpath:
@@ -56,9 +68,23 @@ def construct_path_from(argpath, filetype, rel_path_to_this_script_dir):
     if '*' in argpath:
         files = []
         for filename in listdir(pathjoin(rel_path_to_this_script_dir, filetype)):
-            if (fnmatch(filename, argpath)
-                    and not(filename.startswith('.')) and not(filename.endswith('Test.csv'))):
-                files += construct_path_from(filename, filetype, rel_path_to_this_script_dir)
+            if (not(fnmatch(filename, argpath))
+                    or(filename.startswith('.')) or(filename.endswith('Test.csv'))):
+                continue
+            flag = False
+            for family_name, selected_models in predictions_filter:
+                if filename.startswith(family_name):
+                    flag = True
+                    for selected_model in selected_models:
+                        if filename.startswith(selected_model):
+                            flag = False
+                            break
+                    if flag:
+                        break
+            if flag:
+                continue
+            files += construct_path_from(filename, filetype, rel_path_to_this_script_dir
+                                         , predictions_filter=predictions_filter)
         return files
     return [pathjoin(rel_path_to_this_script_dir, filetype, argpath)]
 
@@ -77,16 +103,25 @@ def main(args, rel_path_to_this_script_dir):
     predictions_list = parsed_args.predictions_list
     if predictions_list is None:
         predictions_list = '*'
+    predictions_filter = parsed_args.predictions_filter
+    if predictions_filter is None:
+        predictions_filter = []
+    else:
+        filt_parser = lambda x: (x[0], x[1].split(','))
+        predictions_filter = [filt_parser(filt.split(':')) for filt in predictions_filter]
+
     predictions_list = construct_path_from(predictions_list
                                            , 'predictions'
-                                           , rel_path_to_this_script_dir)
+                                           , rel_path_to_this_script_dir
+                                           , predictions_filter=predictions_filter)
 
     metrics_list = [get_metric(metric_name) for metric_name in parsed_args.metrics_list]
 
     reporter = Reporter(output_filepath_template, parsed_args.whole_country)
     return reporter.report(predictions_list, metrics_list
                            , horizons_list=parsed_args.horizons_list
-                           , date_selector=parsed_args.date_selector)
+                           , date_selector=parsed_args.date_selector
+                           , compare_diff_with_actual=parsed_args.compare_diff_with_actual)
 
 
 if __name__ == '__main__':
