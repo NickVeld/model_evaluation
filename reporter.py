@@ -1,6 +1,7 @@
 '''Create a report form data and predictions'''
 
 import warnings
+import inspect
 import re
 import datetime
 from itertools import product
@@ -60,7 +61,7 @@ class Reporter:
                 result.append(parse_date_obj(date_str))
             return result
 
-        print(filepath)
+        print("Reading", filepath)
         fileinfo = None
         file_pattern_res = DATAFILE_PATTERN.search(filepath)
         if file_pattern_res:
@@ -401,7 +402,7 @@ class Reporter:
                 fig, axes = plt.subplots(
                     sdate_info.columns.get_level_values(axis_y_splitter).nunique()
                     , 1
-                    , figsize=(16, 30)
+                    , figsize=(16, 36)
                 )
                 for (axis_y_name, one_axis_y_info), axe in zip(sdate_info.groupby(
                         level=axis_y_splitter, axis=1
@@ -464,7 +465,7 @@ class Reporter:
                                  , line_labels_basis=None
                                  , line_filter=None
                                  , horizons_list=None
-                                 , compare_diff_with_actual=False):
+                                 , compare_diff_with_actual=None):
         if file_splitter is None:
             file_splitter = 'PredType'
         if axis_x is None:
@@ -502,7 +503,7 @@ class Reporter:
                 fig, axes = plt.subplots(
                     file_info.columns.get_level_values(axis_y_splitter).nunique()
                     , 1
-                    , figsize=(16, 30)
+                    , figsize=(16, 36)
                 )
                 for (axis_y_name, one_axis_y_info), axe in zip(file_info.groupby(
                         level=axis_y_splitter, axis=1
@@ -531,8 +532,14 @@ class Reporter:
                         axe_x = non_nan_plot_info.index.get_level_values(axis_x)
                         axe_y = non_nan_plot_info.values.reshape(-1)
                         if compare_diff_with_actual:
-                            axe_y = axe_y - data.loc[non_nan_plot_info.index
-                                                    , pd.IndexSlice[file_name, 0, 'Actual']]
+                            # print(location, file_name, axis_y_name, line_label, compare_diff_with_actual.SHORT_TRANSFORM_NAME)
+                            axe_y = compare_diff_with_actual.transform(
+                                data.loc[non_nan_plot_info.index
+                                         , pd.IndexSlice[file_name, 0, 'Actual']].values
+                                , axe_y
+                            )
+                            #axe_y = axe_y - data.loc[non_nan_plot_info.index
+                            #                        , pd.IndexSlice[file_name, 0, 'Actual']]
 
                         axe.plot(axe_x, axe_y, '-' + PLOT_MARKERS[2 * ((line_n - 1) // 3) % len(PLOT_MARKERS)]
                                 , label=line_label, c=color)
@@ -548,21 +555,22 @@ class Reporter:
                     for tick in axe.get_xticklabels():
                         tick.set_rotation(45)
                     axe.tick_params(axis='both', which='major', labelsize=20)
-                    axe.legend(loc='upper left', fontsize=15)
+                    axe.legend(loc='upper left', fontsize=25)
 
                     axe.set_title(
                         "Series of covid-19 for {} {} and {}".format(location, file_name
                                                                              , axis_y_displayname)
                         , fontsize=25
                     )
-                    pretext = 'Diff with actual' if compare_diff_with_actual else 'Cumulative'
-                    axe.set_ylabel(pretext + ' cases for {}'.format(axis_y_displayname)
+                    pretext = (compare_diff_with_actual.TRANSFORM_NAME
+                               if compare_diff_with_actual else 'Cumulative cases')
+                    axe.set_ylabel(pretext + ' for {}'.format(axis_y_displayname)
                                    , fontsize=20)
 
                 plt.tight_layout()
                 path_components = [save_path_template, location, file_name]
                 if compare_diff_with_actual:
-                    path_components.append('diff')
+                    path_components.append(compare_diff_with_actual.SHORT_TRANSFORM_NAME)
                 image_name = '_'.join(path_components) + '.png'
                 fig.savefig(image_name)
                 plt.close()
@@ -615,15 +623,20 @@ class Reporter:
         generated_files += self.generate_compairing_plot(
             dap_for_report
             , self.opt + '_comparison'
-            , compare_diff_with_actual=False
+            , compare_diff_with_actual=None
             , horizons_list=horizons_list
         )
 
-        generated_files += self.generate_compairing_plot(
-            dap_for_report
-            , self.opt + '_comparison'
-            , compare_diff_with_actual=True
-            , horizons_list=horizons_list
-        )
+        for metric in metrics_list:
+            if not(inspect.isfunction(metric) or inspect.ismethod(metric)):
+                generated_files += self.generate_compairing_plot(
+                    dap_for_report
+                    , self.opt + '_comparison'
+                    , compare_diff_with_actual=metric
+                    , horizons_list=horizons_list
+                )
+
+        generated_files += self.generate_metrics_plot(metric_vals
+                                                      , self.opt + '_metrics')
 
         return generated_files
