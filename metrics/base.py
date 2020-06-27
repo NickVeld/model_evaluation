@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class _metric_base:
     '''
     Metric name
@@ -16,4 +19,10 @@ class _metric_base:
         :return: Metric value
         :rtype: float or np.float64
         '''
-        return 0.
+        return np.mean(self.transform(y_true, y_pred))
+
+    TRANSFORM_NAME = "Base"
+    SHORT_TRANSFORM_NAME = "BASE"
+
+    def transform(self, y_true, y_pred):
+        return np.array([0.])
