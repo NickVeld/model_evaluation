@@ -358,6 +358,9 @@ class Reporter:
             'MASE_Germany': 3,
             'MASE_Russia': 3,
             'MASE_US': 3,
+            'MAPE_Germany': 3,
+            'MAPE_Russia': 3,
+            'MAPE_US': 3,
         }).to_csv(sep='&', line_terminator=linet)[:-len(linet)]
         return text.replace('&', ' & ')
 
