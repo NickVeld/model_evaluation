@@ -5,7 +5,7 @@ print('Generated files:'
           '--output-filename', 'total',
           '--predictions-list', '*',
           '--predictions-filter', 'SIR:SIRp,SIRDp,SIRFp', 'CUS:CUSa',  #noIq2.5,CUSc70q2.5',
-          '--metrics-list', 'MAE', 'MASE', 'MALE',
+          '--metrics-list', 'MAE', 'MALE', 'MAPE',
           '--whole-country',
           '--horizons-list', '1', '5', '30',
           '--date-selector', '2020-04-21',
