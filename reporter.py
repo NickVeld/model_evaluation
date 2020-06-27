@@ -445,6 +445,7 @@ class Reporter:
                         tick.set_rotation(45)
                     axe.tick_params(axis='both', which='major', labelsize=20)
                     axe.legend(loc='upper left', fontsize=25)
+                    axe.grid()
 
                     axe.set_title("Series of covid-19 for {} {}".format(location, axis_y_name)
                                   , fontsize=25)
@@ -544,9 +545,7 @@ class Reporter:
                         axe.plot(axe_x, axe_y, '-' + PLOT_MARKERS[2 * ((line_n - 1) // 3) % len(PLOT_MARKERS)]
                                 , label=line_label, c=color)
 
-                    if compare_diff_with_actual:
-                        axe.grid()
-                    else:
+                    if not(compare_diff_with_actual):
                         sel_data = data.loc[:, pd.IndexSlice[file_name, 0, 'Actual']][dates_mask]
                         data_x = sel_data.index.get_level_values(axis_x)
                         data_y = sel_data.values.reshape(-1)
@@ -556,9 +555,10 @@ class Reporter:
                         tick.set_rotation(45)
                     axe.tick_params(axis='both', which='major', labelsize=20)
                     axe.legend(loc='upper left', fontsize=25)
+                    axe.grid()
 
                     axe.set_title(
-                        "Series of covid-19 for {} {} and {}".format(location, file_name
+                        "Plots over predict dates of covid-19 for {} {} and {}".format(location, file_name
                                                                              , axis_y_displayname)
                         , fontsize=25
                     )
@@ -635,8 +635,5 @@ class Reporter:
                     , compare_diff_with_actual=metric
                     , horizons_list=horizons_list
                 )
-
-        generated_files += self.generate_metrics_plot(metric_vals
-                                                      , self.opt + '_metrics')
 
         return generated_files
