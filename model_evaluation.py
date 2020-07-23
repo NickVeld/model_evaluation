@@ -120,8 +120,7 @@ def main(args, rel_path_to_this_script_dir):
     reporter = Reporter(output_filepath_template, parsed_args.whole_country)
     return reporter.report(predictions_list, metrics_list
                            , horizons_list=parsed_args.horizons_list
-                           , date_selector=parsed_args.date_selector
-                           , compare_diff_with_actual=parsed_args.compare_diff_with_actual)
+                           , date_selector=parsed_args.date_selector)
 
 
 if __name__ == '__main__':
